@@ -5,9 +5,34 @@ set -e
 # --- SENTINEL CHECK ---
 # If this file exists, it means the script already ran in this build session.
 if [ -f ".pyav_installed" ]; then
-    echo "⏭️  PyAV already built in this session. Skipping to prevent double-install."
+    echo "⏭️  PyAV and Deno already built/installed in this session. Skipping."
     exit 0
 fi
+
+echo "====================================="
+echo "🚀 Installing Deno"
+echo "====================================="
+
+# We set DENO_INSTALL to the current directory
+export DENO_INSTALL="$PWD"
+curl -fsSL https://deno.land/install.sh | sh
+
+DENO_BIN="./bin/deno"
+
+if [[ ! -f "$DENO_BIN" ]]; then
+    echo "❌ Error: Deno binary not found at $DENO_BIN"
+    exit 1
+fi
+
+chmod +x "$DENO_BIN"
+"$DENO_BIN" --version
+
+# Add Deno to PATH for the rest of this script session
+export PATH="$PWD/bin:$PATH"
+
+echo "====================================="
+echo "✅ Deno installation complete"
+echo "====================================="
 
 # --- Configuration ---
 PYAV_REPO="https://github.com/PyAV-Org/PyAV.git"
@@ -38,6 +63,7 @@ python scripts/fetch-vendor.py --config-file scripts/ffmpeg-custom.json vendor
 
 # 5. Prepare Runtime Libraries
 echo "🚚 Moving shared libraries to $RUNTIME_LIB_DIR..."
+# Note: $RUNTIME_LIB_DIR is one level up from $WORK_DIR
 cp -r vendor/lib/*.so* "../$RUNTIME_LIB_DIR/"
 
 # 6. Configure Build Environment
@@ -60,4 +86,4 @@ rm -rf "$WORK_DIR"
 # This prevents the script from running a second time
 touch ".pyav_installed"
 
-echo "✅ Success. Fresh PyAV build complete."
+echo "✅ Success. Deno installed and PyAV build complete."
