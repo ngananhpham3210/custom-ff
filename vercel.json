@@ -6,11 +6,5 @@
       "maxDuration": 300,
       "runtime": "@vercel/python@6.1.0"
     }
-  },
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/index.py"
-    }
-  ]
+  }
 }
