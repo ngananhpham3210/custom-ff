@@ -2,80 +2,64 @@
 
 set -e
 
-# === Configuration ===
+# --- Configuration ---
 PYAV_REPO="https://github.com/PyAV-Org/PyAV.git"
+# Ensure the platform placeholder is correct for your use case
 FFMPEG_URL="https://github.com/ngananhpham3210/pyav-ffmpeg/releases/download/custom-audio/ffmpeg-{platform}.tar.gz"
 WORK_DIR="PyAV-Custom"
 RUNTIME_LIB_DIR="lib_native"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# === Check if already installed ===
-export LD_LIBRARY_PATH="$SCRIPT_DIR/$RUNTIME_LIB_DIR:$LD_LIBRARY_PATH"
-if python -c "import av" 2>/dev/null && [ -d "$RUNTIME_LIB_DIR" ] && [ "$(ls -A $RUNTIME_LIB_DIR/*.so* 2>/dev/null)" ]; then
-    echo "✅ PyAV already installed. Skipping."
-    exit 0
-fi
-
-echo "🚀 Starting PyAV custom build..."
-
-# === Clean previous builds ===
-echo "🧹 Cleaning previous artifacts..."
+# 1. Clean up previous build artifacts
+echo "🧹 Cleaning up previous build artifacts..."
 rm -rf "$WORK_DIR" "$RUNTIME_LIB_DIR"
-pip uninstall av -y 2>/dev/null || true
-
-# === Create directories ===
 mkdir -p "$RUNTIME_LIB_DIR"
 
-# === Clone PyAV ===
-echo "⬇️  Cloning PyAV..."
-git clone --depth 1 "$PYAV_REPO" "$WORK_DIR"
+# 2. Clone PyAV
+echo "⬇️  Cloning PyAV repository..."
+git clone "$PYAV_REPO" "$WORK_DIR"
 cd "$WORK_DIR"
 
-# === Setup custom FFmpeg config ===
+# 3. Configure Custom FFmpeg
 echo "{\"url\": \"$FFMPEG_URL\"}" > scripts/ffmpeg-custom.json
 
-# === Install build dependencies ===
+# 4. Install Build Dependencies
+# ADDED: 'wheel' package to prevent legacy setup.py double-execution behavior
 echo "📦 Installing build dependencies..."
-pip install --upgrade pip setuptools cython pkgconfig --quiet --root-user-action=ignore
+pip install --upgrade pip setuptools cython pkgconfig wheel
 
-# === Download custom FFmpeg ===
-echo "⬇️  Downloading custom FFmpeg..."
+# 5. Download Custom FFmpeg
+echo "⬇️  Fetching custom FFmpeg vendor..."
 python scripts/fetch-vendor.py --config-file scripts/ffmpeg-custom.json vendor
 
-# === Copy runtime libraries ===
-echo "🚚 Copying shared libraries..."
-cp vendor/lib/*.so* "../$RUNTIME_LIB_DIR/"
+# 6. Prepare Runtime Libraries
+echo "🚚 Moving shared libraries to $RUNTIME_LIB_DIR..."
+# Note: This moves the .so files out for your lambda/vercel deployment bundle
+cp -r vendor/lib/*.so* "../$RUNTIME_LIB_DIR/"
 
-# === Setup build environment ===
+# 7. Configure Build Environment
 VENDOR_DIR="$(pwd)/vendor"
 
+echo "🔧 Patching pkg-config files..."
+# Patch pkg-config to point to the absolute path of the vendor dir
 sed -i "s|^prefix=.*|prefix=$VENDOR_DIR|g" "$VENDOR_DIR"/lib/pkgconfig/*.pc
 
-export PKG_CONFIG_PATH="$VENDOR_DIR/lib/pkgconfig"
+export PKG_CONFIG_PATH="$VENDOR_DIR"/lib/pkgconfig:$PKG_CONFIG_PATH
 export CFLAGS="-I$VENDOR_DIR/include -Wno-deprecated-declarations"
-export LDFLAGS="-L$VENDOR_DIR/lib -Wl,-rpath,\$ORIGIN/../$RUNTIME_LIB_DIR -Wl,-rpath,/var/task/$RUNTIME_LIB_DIR"
+export LDFLAGS="-L$VENDOR_DIR/lib"
 
-# === Build and install PyAV ===
+# Rpath for AWS Lambda / Vercel environment
+export LDFLAGS="$LDFLAGS -Wl,-rpath,/var/task/$RUNTIME_LIB_DIR"
+
+# 8. Build and Install PyAV
 echo "🛠️  Building PyAV..."
-pip install . --no-build-isolation --quiet --root-user-action=ignore
 
-# === Cleanup ===
-cd ..
-rm -rf "$WORK_DIR"
+# ADDED: --no-deps 
+# This prevents pip from trying to download numpy/pillow/etc again.
+# It focuses purely on compiling PyAV using the flags above.
+pip install . \
+    --no-binary av \
+    --no-build-isolation \
+    --no-deps \
+    -v
 
-# === Set library path for verification ===
-export LD_LIBRARY_PATH="$SCRIPT_DIR/$RUNTIME_LIB_DIR:$LD_LIBRARY_PATH"
-
-# === Verify installation ===
-echo "🔍 Verifying installation..."
-python -c "import av; print(f'✅ PyAV version: {av.__version__}')"
-
-echo ""
-echo "=========================================="
-echo "✅ PyAV installed successfully!"
-echo "📁 Runtime libraries: $RUNTIME_LIB_DIR/"
-echo "=========================================="
-echo ""
-echo "⚠️  IMPORTANT: Set this before running your app:"
-echo "   export LD_LIBRARY_PATH=\"\$(pwd)/$RUNTIME_LIB_DIR:\$LD_LIBRARY_PATH\""
-echo ""
+echo "✅ Success. PyAV build complete."
