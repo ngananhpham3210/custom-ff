@@ -48,7 +48,8 @@ export LDFLAGS="-L$VENDOR_DIR/lib"
 export LDFLAGS="$LDFLAGS -Wl,-rpath,/var/task/$RUNTIME_LIB_DIR"
 
 echo "🛠️  Building PyAV from source..."
+
 # The -v flag gives verbose output for easier debugging if it fails again
-pip install . --no-binary av -v
+pip install . --no-binary av -v --no-build-isolation
 
 echo "✅ Success. PyAV build complete and libraries are in '$RUNTIME_LIB_DIR'."
