@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "bash install.sh",
   "framework": "fastapi",
   "functions": {
     "api/index.py": {
