@@ -44,7 +44,7 @@ export PKG_CONFIG_PATH="$VENDOR_DIR"/lib/pkgconfig:$PKG_CONFIG_PATH
 
 # --- THE FIX IS HERE ---
 # Added -Wno-discarded-qualifiers to silence the red warnings about 'const' pointers
-export CFLAGS="-I$VENDOR_DIR/include -Wno-deprecated-declarations -Wno-discarded-qualifiers"
+export CFLAGS="-I$VENDOR_DIR/include -Wno-deprecated-declarations -Wno-discarded-qualifiers -Wpointer-to-int-cast"
 export LDFLAGS="-L$VENDOR_DIR/lib"
 export LDFLAGS="$LDFLAGS -Wl,-rpath,/var/task/$RUNTIME_LIB_DIR"
 
