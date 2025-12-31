@@ -15,7 +15,7 @@ mkdir -p "$RUNTIME_LIB_DIR"
 
 # 2. Clone PyAV
 echo "⬇️  Cloning PyAV repository..."
-# We clone with --depth 1 to minimize git history size (helps prevent git pack errors)
+# Clone depth 1 to save time and prevent git history errors
 git clone --depth 1 "$PYAV_REPO" "$WORK_DIR"
 cd "$WORK_DIR"
 
@@ -23,7 +23,6 @@ cd "$WORK_DIR"
 echo "{\"url\": \"$FFMPEG_URL\"}" > scripts/ffmpeg-custom.json
 
 # 4. Install Build Dependencies
-# Added 'wheel' to fix double-install issues
 echo "📦 Installing build dependencies..."
 pip install --upgrade pip setuptools cython pkgconfig wheel
 
@@ -42,24 +41,22 @@ echo "🔧 Patching pkg-config files..."
 sed -i "s|^prefix=.*|prefix=$VENDOR_DIR|g" "$VENDOR_DIR"/lib/pkgconfig/*.pc
 
 export PKG_CONFIG_PATH="$VENDOR_DIR"/lib/pkgconfig:$PKG_CONFIG_PATH
-export CFLAGS="-I$VENDOR_DIR/include -Wno-deprecated-declarations"
+
+# --- THE FIX IS HERE ---
+# Added -Wno-discarded-qualifiers to silence the red warnings about 'const' pointers
+export CFLAGS="-I$VENDOR_DIR/include -Wno-deprecated-declarations -Wno-discarded-qualifiers"
 export LDFLAGS="-L$VENDOR_DIR/lib"
-# Rpath for Vercel/Lambda environment
 export LDFLAGS="$LDFLAGS -Wl,-rpath,/var/task/$RUNTIME_LIB_DIR"
 
 # 8. Build and Install PyAV
 echo "🛠️  Building PyAV..."
-# Added --no-deps to prevent checking for numpy/pillow again
 pip install . \
     --no-binary av \
     --no-build-isolation \
     --no-deps \
     -v
 
-# --- THE FIX FOR ENOENT ERROR ---
-# 9. Clean up source directory
-# Once installed, we delete the source folder. 
-# This stops Vercel from trying to scan the .git folder and crashing.
+# 9. Clean up source directory (Prevents Vercel ENOENT errors)
 echo "🧹 Removing source code to prevent deployment errors..."
 cd ..
 rm -rf "$WORK_DIR"
