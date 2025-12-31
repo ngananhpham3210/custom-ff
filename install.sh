@@ -2,57 +2,97 @@
 
 set -e
 
+# =============================================================================
+# PyAV Custom FFmpeg Installation Script
+# =============================================================================
+
 # --- Configuration ---
 PYAV_REPO="https://github.com/PyAV-Org/PyAV.git"
 FFMPEG_URL="https://github.com/ngananhpham3210/pyav-ffmpeg/releases/download/custom-audio/ffmpeg-{platform}.tar.gz"
 WORK_DIR="PyAV-Custom"
 RUNTIME_LIB_DIR="lib_native"
 
-# --- THE FIX: Skip if already properly installed ---
-if python -c "import av; print(av.__file__)" 2>/dev/null && [ -d "$RUNTIME_LIB_DIR" ] && [ "$(ls -A $RUNTIME_LIB_DIR 2>/dev/null)" ]; then
-    echo "✅ PyAV with custom FFmpeg already installed. Skipping build."
+# --- Functions ---
+cleanup() {
+    echo "🧹 Cleaning up build directory..."
+    rm -rf "$WORK_DIR"
+}
+
+check_installed() {
+    if python -c "import av" 2>/dev/null && [ -d "$RUNTIME_LIB_DIR" ] && [ "$(ls -A $RUNTIME_LIB_DIR/*.so* 2>/dev/null)" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# --- Main Script ---
+echo "=============================================="
+echo "   PyAV + Custom FFmpeg Installer"
+echo "=============================================="
+
+# Step 1: Check if already installed
+if check_installed; then
+    echo "✅ PyAV already installed with custom FFmpeg. Skipping."
     exit 0
 fi
 
-# --- Clean up previous build artifacts ---
-echo "🧹 Cleaning up previous build artifacts..."
-rm -rf "$WORK_DIR"
+# Step 2: Clean previous builds
+echo ""
+echo "[1/7] Cleaning previous builds..."
+rm -rf "$WORK_DIR" "$RUNTIME_LIB_DIR"
 mkdir -p "$RUNTIME_LIB_DIR"
 
-# --- Clone PyAV ---
-echo "⬇️  Cloning PyAV repository..."
-git clone --depth 1 "$PYAV_REPO" "$WORK_DIR"  # Added --depth 1 for faster clone
+# Step 3: Clone PyAV
+echo ""
+echo "[2/7] Cloning PyAV repository..."
+git clone --depth 1 "$PYAV_REPO" "$WORK_DIR"
 cd "$WORK_DIR"
 
-# --- Configure Custom FFmpeg ---
+# Step 4: Install build dependencies
+echo ""
+echo "[3/7] Installing build dependencies..."
+pip install --upgrade pip setuptools cython pkgconfig --quiet
+
+# Step 5: Download custom FFmpeg
+echo ""
+echo "[4/7] Downloading custom FFmpeg..."
 echo "{\"url\": \"$FFMPEG_URL\"}" > scripts/ffmpeg-custom.json
-
-# --- Install Build Dependencies ---
-pip install --upgrade pip setuptools cython pkgconfig
-
-# --- Download Custom FFmpeg ---
 python scripts/fetch-vendor.py --config-file scripts/ffmpeg-custom.json vendor
 
-# --- Prepare Runtime Libraries ---
-echo "🚚 Moving shared libraries to $RUNTIME_LIB_DIR..."
+# Step 6: Copy runtime libraries
+echo ""
+echo "[5/7] Copying runtime libraries..."
 cp -r vendor/lib/*.so* "../$RUNTIME_LIB_DIR/"
 
-# --- Configure Build Environment ---
+# Step 7: Setup build environment
+echo ""
+echo "[6/7] Configuring build environment..."
 VENDOR_DIR="$(pwd)/vendor"
 
-echo "🔧 Patching pkg-config files..."
 sed -i "s|^prefix=.*|prefix=$VENDOR_DIR|g" "$VENDOR_DIR"/lib/pkgconfig/*.pc
 
-export PKG_CONFIG_PATH="$VENDOR_DIR/lib/pkgconfig:$PKG_CONFIG_PATH"
+export PKG_CONFIG_PATH="$VENDOR_DIR/lib/pkgconfig"
 export CFLAGS="-I$VENDOR_DIR/include -Wno-deprecated-declarations"
 export LDFLAGS="-L$VENDOR_DIR/lib -Wl,-rpath,/var/task/$RUNTIME_LIB_DIR"
 
-# --- Build and Install PyAV (ONLY ONCE) ---
-echo "🛠️  Building PyAV from source..."
-pip install . -v --no-build-isolation
+# Step 8: Build and install PyAV
+echo ""
+echo "[7/7] Building and installing PyAV..."
+pip install . --no-build-isolation --quiet
 
-# --- Cleanup build directory ---
+# Step 9: Cleanup
 cd ..
-rm -rf "$WORK_DIR"
+cleanup
 
-echo "✅ Success! PyAV installed with custom FFmpeg."
+# Step 10: Verify installation
+echo ""
+echo "=============================================="
+if python -c "import av; print(f'PyAV version: {av.__version__}')" 2>/dev/null; then
+    echo "✅ Installation successful!"
+    echo "   Libraries location: $RUNTIME_LIB_DIR/"
+    ls -la "$RUNTIME_LIB_DIR/" | head -10
+else
+    echo "❌ Installation failed!"
+    exit 1
+fi
+echo "=============================================="
